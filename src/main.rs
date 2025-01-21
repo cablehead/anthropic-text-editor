@@ -4,7 +4,6 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use walkdir;
 
 #[cfg(test)]
 mod tests;
@@ -154,7 +153,7 @@ impl Editor {
         // Save current content to history
         self.history
             .entry(path.to_path_buf())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(content.clone());
 
         // Create new content with inserted line
@@ -316,7 +315,7 @@ impl Editor {
                 // Save current content to history
                 self.history
                     .entry(path.to_path_buf())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(content.clone());
 
                 let new_content = content.replace(old_str, new_str);
