@@ -2,8 +2,10 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
+use walkdir;
 
 #[cfg(test)]
 mod tests;
@@ -153,7 +155,7 @@ impl Editor {
         // Save current content to history
         self.history
             .entry(path.to_path_buf())
-            .or_default()
+            .or_insert_with(Vec::new)
             .push(content.clone());
 
         // Create new content with inserted line
@@ -165,17 +167,19 @@ impl Editor {
 
         // Calculate context for the edit
         let context_start = (insert_line as usize).saturating_sub(4);
-        let context: String = new_lines
+        let mut context = String::new();
+        new_lines
             .iter()
+            .enumerate()
             .skip(context_start)
             .take(8)
-            .enumerate()
-            .map(|(i, line)| format!("{:6}\t{}", i + context_start + 1, line))
-            .collect::<Vec<_>>()
-            .join("\n");
+            .fold(&mut context, |acc, (i, line)| {
+                let _ = write!(acc, "{:6}\t{}\n", i + 1, line);
+                acc
+            });
 
         Ok(format!(
-            "The file {} has been edited.\nHere's the result of running `cat -n` on a snippet:\n{}\n\nReview the changes and make sure they are as expected (correct indentation, no duplicate lines, etc). Edit the file again if necessary.",
+            "The file {} has been edited.\nHere's the result of running `cat -n` on a snippet:\n{}\nReview the changes and make sure they are as expected (correct indentation, no duplicate lines, etc). Edit the file again if necessary.",
             path.display(), context
         ))
     }
@@ -190,13 +194,19 @@ impl Editor {
         if let Some(previous_content) = history.pop() {
             fs::write(path, &previous_content)?;
 
+            let mut display_content = String::new();
+            previous_content
+                .lines()
+                .enumerate()
+                .fold(&mut display_content, |acc, (i, line)| {
+                    let _ = write!(acc, "{:6}\t{}\n", i + 1, line);
+                    acc
+                });
+
             Ok(format!(
                 "Last edit to {} undone successfully.\nHere's the result of running `cat -n`:\n{}\n",
                 path.display(),
-                previous_content.lines()
-                    .enumerate()
-                    .map(|(i, line)| format!("{:6}\t{}\n", i + 1, line))
-                    .collect::<String>()
+                display_content
             ))
         } else {
             Err(EditorError::InvalidRange(format!(
@@ -244,22 +254,30 @@ impl Editor {
                 )));
             }
 
-            let result: String = lines[(start - 1) as usize..end as usize]
+            let mut result = String::new();
+            lines[(start - 1) as usize..end as usize]
                 .iter()
                 .enumerate()
-                .map(|(i, line)| format!("{:6}\t{}\n", i + start as usize, line))
-                .collect();
+                .fold(&mut result, |acc, (i, line)| {
+                    let _ = write!(acc, "{:6}\t{}\n", i + start as usize, line);
+                    acc
+                });
+
             Ok(format!(
                 "Here's the result of running `cat -n` on {}:\n{}",
                 path.display(),
                 result
             ))
         } else {
-            let result: String = lines
+            let mut result = String::new();
+            lines
                 .iter()
                 .enumerate()
-                .map(|(i, line)| format!("{:6}\t{}\n", i + 1, line))
-                .collect();
+                .fold(&mut result, |acc, (i, line)| {
+                    let _ = write!(acc, "{:6}\t{}\n", i + 1, line);
+                    acc
+                });
+
             Ok(format!(
                 "Here's the result of running `cat -n` on {}:\n{}",
                 path.display(),
@@ -282,7 +300,8 @@ impl Editor {
             output.push(entry.path().to_string_lossy().into_owned());
         }
 
-        Ok(format!("Here's the files and directories up to 2 levels deep in {}, excluding hidden items:\n{}\n",
+        Ok(format!(
+            "Here's the files and directories up to 2 levels deep in {}, excluding hidden items:\n{}\n",
             path.display(),
             output.join("\n")
         ))
@@ -315,7 +334,7 @@ impl Editor {
                 // Save current content to history
                 self.history
                     .entry(path.to_path_buf())
-                    .or_default()
+                    .or_insert_with(Vec::new)
                     .push(content.clone());
 
                 let new_content = content.replace(old_str, new_str);
@@ -328,19 +347,21 @@ impl Editor {
                 // Ensure we don't underflow when calculating context_start
                 let context_start = if line_num > 4 { line_num - 4 } else { 1 };
 
-                let context: String = new_content
+                let mut context = String::new();
+                new_content
                     .lines()
                     .enumerate()
                     .skip(context_start - 1)
                     .take(8 + new_str.chars().filter(|&c| c == '\n').count())
-                    .map(|(i, line)| format!("{:6}\t{}", i + 1, line))
-                    .collect::<Vec<_>>()
-                    .join("\n");
+                    .fold(&mut context, |acc, (i, line)| {
+                        let _ = write!(acc, "{:6}\t{}\n", i + 1, line);
+                        acc
+                    });
 
                 Ok(format!(
-                "The file {} has been edited.\nHere's the result of running `cat -n` on a snippet:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
-                path.display(), context
-            ))
+                    "The file {} has been edited.\nHere's the result of running `cat -n` on a snippet:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
+                    path.display(), context
+                ))
             }
             _ => Err(EditorError::InvalidRange(format!(
                 "Multiple occurrences of old_str `{}` found. Please ensure it is unique",
