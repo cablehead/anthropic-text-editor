@@ -326,20 +326,22 @@ impl Editor {
                 let prefix = &content[..matches[0].0];
                 let line_num = prefix.chars().filter(|&c| c == '\n').count() + 1;
 
-                let context_start = line_num.saturating_sub(4);
+                // Ensure we don't underflow when calculating context_start
+                let context_start = if line_num > 4 { line_num - 4 } else { 1 };
+
                 let context: String = new_content
                     .lines()
+                    .enumerate()
                     .skip(context_start - 1)
                     .take(8 + new_str.chars().filter(|&c| c == '\n').count())
-                    .enumerate()
-                    .map(|(i, line)| format!("{:6}\t{}", i + context_start, line))
+                    .map(|(i, line)| format!("{:6}\t{}", i + 1, line))
                     .collect::<Vec<_>>()
                     .join("\n");
 
                 Ok(format!(
-                    "The file {} has been edited.\nHere's the result of running `cat -n` on a snippet:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
-                    path.display(), context
-                ))
+                "The file {} has been edited.\nHere's the result of running `cat -n` on a snippet:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
+                path.display(), context
+            ))
             }
             _ => Err(EditorError::InvalidRange(format!(
                 "Multiple occurrences of old_str `{}` found. Please ensure it is unique",

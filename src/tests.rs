@@ -13,6 +13,7 @@ fn create_test_input(command: &str, path: &str) -> Request {
             view_range: None,
             old_str: None,
             new_str: None,
+            insert_line: None, // Added this field
         },
     }
 }
