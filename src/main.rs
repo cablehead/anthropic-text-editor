@@ -1,11 +1,10 @@
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+use std::fmt::Write;
 use std::fs;
 use std::io;
-use std::fmt::Write;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
-use walkdir;
 
 #[cfg(test)]
 mod tests;
@@ -155,7 +154,7 @@ impl Editor {
         // Save current content to history
         self.history
             .entry(path.to_path_buf())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(content.clone());
 
         // Create new content with inserted line
@@ -174,7 +173,7 @@ impl Editor {
             .skip(context_start)
             .take(8)
             .fold(&mut context, |acc, (i, line)| {
-                let _ = write!(acc, "{:6}\t{}\n", i + 1, line);
+                let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
                 acc
             });
 
@@ -199,7 +198,7 @@ impl Editor {
                 .lines()
                 .enumerate()
                 .fold(&mut display_content, |acc, (i, line)| {
-                    let _ = write!(acc, "{:6}\t{}\n", i + 1, line);
+                    let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
                     acc
                 });
 
@@ -259,7 +258,7 @@ impl Editor {
                 .iter()
                 .enumerate()
                 .fold(&mut result, |acc, (i, line)| {
-                    let _ = write!(acc, "{:6}\t{}\n", i + start as usize, line);
+                    let _ = writeln!(acc, "{:6}\t{}", i + start as usize, line);
                     acc
                 });
 
@@ -274,7 +273,7 @@ impl Editor {
                 .iter()
                 .enumerate()
                 .fold(&mut result, |acc, (i, line)| {
-                    let _ = write!(acc, "{:6}\t{}\n", i + 1, line);
+                    let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
                     acc
                 });
 
@@ -334,7 +333,7 @@ impl Editor {
                 // Save current content to history
                 self.history
                     .entry(path.to_path_buf())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(content.clone());
 
                 let new_content = content.replace(old_str, new_str);
@@ -354,7 +353,7 @@ impl Editor {
                     .skip(context_start - 1)
                     .take(8 + new_str.chars().filter(|&c| c == '\n').count())
                     .fold(&mut context, |acc, (i, line)| {
-                        let _ = write!(acc, "{:6}\t{}\n", i + 1, line);
+                        let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
                         acc
                     });
 
