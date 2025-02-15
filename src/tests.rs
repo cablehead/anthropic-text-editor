@@ -123,13 +123,20 @@ fn test_str_replace_unique() {
 fn test_str_replace_nonexistent() {
     let mut editor = Editor::new();
     let file = create_test_file("Original content");
-
     let mut input = create_test_input("str_replace", file.path().to_str().unwrap());
-    input.input.old_str = Some("Nonexistent".to_string());
-    input.input.new_str = Some("New".to_string());
+    input.input.old_str = Some("Nonexistent".into());
+    input.input.new_str = Some("New".into());
 
-    let result = editor.handle_command(input.input);
-    assert!(matches!(result, Err(EditorError::InvalidRange(_))));
+    let result = CliResult::error(editor.handle_command(input.input).unwrap_err());
+
+    let json = serde_json::to_string(&result).unwrap();
+    assert_eq!(
+        json,
+        format!(
+            r#"{{"error":"No replacement was performed, old_str `Nonexistent` did not appear verbatim in {}"}}"#,
+            file.path().display()
+        )
+    );
 }
 
 #[test]

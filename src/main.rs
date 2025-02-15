@@ -19,6 +19,8 @@ enum EditorError {
     InvalidRange(String),
     #[error("View range not allowed for directory")]
     ViewRangeForDirectory,
+    #[error("{0}")]
+    StrReplace(String),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
     #[error("Walk error: {0}")]
@@ -46,6 +48,7 @@ struct Request {
 
 #[derive(Debug, Serialize)]
 struct CliResult {
+    #[serde(skip_serializing_if = "String::is_empty")]
     output: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
@@ -105,7 +108,7 @@ impl Editor {
             "str_replace" => {
                 let old_str = input
                     .old_str
-                    .ok_or_else(|| EditorError::InvalidRange("Missing old_str".into()))?;
+                    .ok_or_else(|| EditorError::StrReplace("Missing old_str".into()))?;
                 let new_str = input.new_str.unwrap_or_default();
                 self.str_replace(&path, &old_str, &new_str)
             }
@@ -324,7 +327,7 @@ impl Editor {
         let matches: Vec<_> = content.match_indices(old_str).collect();
 
         match matches.len() {
-            0 => Err(EditorError::InvalidRange(format!(
+            0 => Err(EditorError::StrReplace(format!(
                 "No replacement was performed, old_str `{}` did not appear verbatim in {}",
                 old_str,
                 path.display()
