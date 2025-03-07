@@ -25,6 +25,10 @@ enum EditorError {
         "The undo_edit command is not implemented in this CLI. Please use git for version control."
     )]
     UndoNotImplemented,
+    #[error("File already exists at: {0}. Cannot overwrite files using command `create`.")]
+    FileAlreadyExists(PathBuf),
+    #[error("Parameter `file_text` is required for command: create")]
+    MissingFileText,
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
     #[error("Walk error: {0}")]
@@ -43,6 +47,8 @@ struct Input {
     new_str: Option<String>,
     #[serde(default)]
     insert_line: Option<i32>,
+    #[serde(default)]
+    file_text: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,13 +93,29 @@ impl Editor {
         Self {}
     }
 
-    fn validate_path(&self, path: &Path, allow_missing: bool) -> Result<(), EditorError> {
+    fn validate_path(&self, path: &Path, command: &str) -> Result<(), EditorError> {
+        // Check if it's an absolute path
         if !path.is_absolute() {
             return Err(EditorError::NotAbsolutePath(path.to_path_buf()));
         }
 
-        if !allow_missing && !path.exists() {
-            return Err(EditorError::PathNotFound(path.to_path_buf()));
+        // For create, file should not exist
+        if command == "create" {
+            if path.exists() {
+                return Err(EditorError::FileAlreadyExists(path.to_path_buf()));
+            }
+        } else {
+            // For other commands, file should exist
+            if !path.exists() {
+                return Err(EditorError::PathNotFound(path.to_path_buf()));
+            }
+
+            // Check if directory for non-view command
+            if path.is_dir() && command != "view" {
+                return Err(EditorError::InvalidRange(
+                    format!("The path {} is a directory and only the `view` command can be used on directories", path.display())
+                ));
+            }
         }
 
         Ok(())
@@ -104,6 +126,12 @@ impl Editor {
 
         match input.command.as_str() {
             "view" => self.view(&path, input.view_range.as_deref()),
+            "create" => {
+                let file_text = input
+                    .file_text
+                    .ok_or_else(|| EditorError::MissingFileText)?;
+                self.create(&path, &file_text)
+            }
             "str_replace" => {
                 let old_str = input
                     .old_str
@@ -134,7 +162,7 @@ impl Editor {
         insert_line: i32,
         new_str: &str,
     ) -> Result<String, EditorError> {
-        self.validate_path(path, false)?;
+        self.validate_path(path, "insert")?;
 
         if path.is_dir() {
             return Err(EditorError::InvalidRange(
@@ -179,11 +207,26 @@ impl Editor {
         ))
     }
 
+    fn create(&mut self, path: &Path, content: &str) -> Result<String, EditorError> {
+        self.validate_path(path, "create")?;
+
+        // Create parent directories if they don't exist
+        if let Some(parent) = path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+
+        fs::write(path, content)?;
+
+        Ok(format!("File created successfully at: {}", path.display()))
+    }
+
     // We'll remove the actual implementation since it's not used
     // The handle_command method already returns UndoNotImplemented error directly
 
     fn view(&self, path: &Path, view_range: Option<&[i32]>) -> Result<String, EditorError> {
-        self.validate_path(path, false)?;
+        self.validate_path(path, "view")?;
 
         if path.is_dir() {
             if view_range.is_some() {
@@ -279,7 +322,7 @@ impl Editor {
         old_str: &str,
         new_str: &str,
     ) -> Result<String, EditorError> {
-        self.validate_path(path, false)?;
+        self.validate_path(path, "str_replace")?;
 
         if path.is_dir() {
             return Err(EditorError::InvalidRange(

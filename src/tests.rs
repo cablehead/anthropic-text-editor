@@ -13,7 +13,8 @@ fn create_test_input(command: &str, path: &str) -> Request {
             view_range: None,
             old_str: None,
             new_str: None,
-            insert_line: None, // Added this field
+            insert_line: None,
+            file_text: None,
         },
     }
 }
@@ -252,13 +253,49 @@ fn test_path_validation() {
 
     // Test relative path
     assert!(matches!(
-        editor.validate_path(Path::new("relative/path.txt"), false),
+        editor.validate_path(Path::new("relative/path.txt"), "view"),
         Err(EditorError::NotAbsolutePath(_))
     ));
 
-    // Test non-existent path
+    // Test non-existent path for view command
     assert!(matches!(
-        editor.validate_path(Path::new("/nonexistent/file.txt"), false),
+        editor.validate_path(Path::new("/nonexistent/file.txt"), "view"),
         Err(EditorError::PathNotFound(_))
     ));
+
+    // Test existing path for create command
+    let file = NamedTempFile::new().unwrap();
+    assert!(matches!(
+        editor.validate_path(file.path(), "create"),
+        Err(EditorError::FileAlreadyExists(_))
+    ));
+}
+
+#[test]
+fn test_create_file() {
+    let mut editor = Editor::new();
+    let dir = tempdir().unwrap();
+    let file_path = dir.path().join("new_file.txt");
+
+    let mut input = create_test_input("create", file_path.to_str().unwrap());
+    input.input.file_text = Some("This is new content".to_string());
+
+    let result = editor.handle_command(input.input).unwrap();
+    assert!(result.contains("File created successfully"));
+
+    // Check if file exists and has correct content
+    let content = fs::read_to_string(&file_path).unwrap();
+    assert_eq!(content, "This is new content");
+}
+
+#[test]
+fn test_create_missing_file_text() {
+    let mut editor = Editor::new();
+    let dir = tempdir().unwrap();
+    let file_path = dir.path().join("new_file.txt");
+
+    let input = create_test_input("create", file_path.to_str().unwrap());
+
+    let result = editor.handle_command(input.input);
+    assert!(matches!(result, Err(EditorError::MissingFileText)));
 }
