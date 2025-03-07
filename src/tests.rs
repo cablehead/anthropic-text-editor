@@ -384,6 +384,23 @@ fn test_undo_not_implemented() {
 }
 
 #[test]
+fn test_invalid_command() {
+    let mut editor = Editor::new();
+    let file = create_test_file("Test content");
+    
+    // Use an invalid command
+    let input = create_test_input("invalid_command", file.path().to_str().unwrap());
+    
+    let result = editor.handle_command(input.input);
+    assert!(matches!(result, Err(EditorError::InvalidRange(_))));
+    
+    if let Err(EditorError::InvalidRange(msg)) = result {
+        assert!(msg.contains("Unrecognized command"));
+        assert!(msg.contains("allowed commands"));
+    }
+}
+
+#[test]
 fn test_path_validation() {
     let editor = Editor::new();
 
@@ -404,6 +421,13 @@ fn test_path_validation() {
     assert!(matches!(
         editor.validate_path(file.path(), "create"),
         Err(EditorError::FileAlreadyExists(_))
+    ));
+    
+    // Test using command other than view on directory
+    let dir = tempdir().unwrap();
+    assert!(matches!(
+        editor.validate_path(dir.path(), "str_replace"),
+        Err(EditorError::InvalidRange(_))
     ));
 }
 
@@ -471,6 +495,27 @@ fn test_create_file() {
     // Check if file exists and has correct content
     let content = fs::read_to_string(&file_path).unwrap();
     assert_eq!(content, "This is new content");
+}
+
+#[test]
+fn test_create_file_with_parent_dirs() {
+    let mut editor = Editor::new();
+    let dir = tempdir().unwrap();
+    // Create path with non-existent parent directories
+    let file_path = dir.path().join("nested/dirs/that/dont/exist/new_file.txt");
+
+    let mut input = create_test_input("create", file_path.to_str().unwrap());
+    input.input.file_text = Some("Content in nested directories".to_string());
+
+    let result = editor.handle_command(input.input).unwrap();
+    assert!(result.contains("File created successfully"));
+
+    // Check if file exists and has correct content
+    let content = fs::read_to_string(&file_path).unwrap();
+    assert_eq!(content, "Content in nested directories");
+    
+    // Verify parent directories were created
+    assert!(file_path.parent().unwrap().exists());
 }
 
 #[test]
