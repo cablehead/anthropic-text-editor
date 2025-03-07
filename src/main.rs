@@ -12,13 +12,15 @@ mod tests;
 
 #[derive(Debug, Error)]
 enum EditorError {
-    #[error("Path {0} does not exist")]
+    #[error("The path {0} does not exist. Please provide a valid path.")]
     PathNotFound(PathBuf),
-    #[error("Path {0} is not an absolute path")]
+    #[error(
+        "The path {0} is not an absolute path, it should start with `/`. Maybe you meant /{0}?"
+    )]
     NotAbsolutePath(PathBuf),
     #[error("Invalid range: {0}")]
     InvalidRange(String),
-    #[error("View range not allowed for directory")]
+    #[error("The `view_range` parameter is not allowed when `path` points to a directory.")]
     ViewRangeForDirectory,
     #[error("{0}")]
     StrReplace(String),
@@ -149,7 +151,7 @@ impl Editor {
             "str_replace" => {
                 let old_str = input
                     .old_str
-                    .ok_or_else(|| EditorError::StrReplace("Missing old_str".into()))?;
+                    .ok_or_else(|| EditorError::StrReplace("Parameter `old_str` is required for command: str_replace".into()))?;
                 let new_str = input.new_str.unwrap_or_default();
                 let allow_multi = input.allow_multi.unwrap_or(false);
                 let use_regex = input.use_regex.unwrap_or(false);
@@ -158,10 +160,10 @@ impl Editor {
             "insert" => {
                 let insert_line = input
                     .insert_line
-                    .ok_or_else(|| EditorError::InvalidRange("Missing insert_line".into()))?;
+                    .ok_or_else(|| EditorError::InvalidRange("Parameter `insert_line` is required for command: insert".into()))?;
                 let new_str = input
                     .new_str
-                    .ok_or_else(|| EditorError::InvalidRange("Missing new_str".into()))?;
+                    .ok_or_else(|| EditorError::InvalidRange("Parameter `new_str` is required for command: insert".into()))?;
                 self.insert(&path, insert_line, &new_str)
             }
             "delete" => {
@@ -172,7 +174,7 @@ impl Editor {
             }
             "undo_edit" => Err(EditorError::UndoNotImplemented),
             _ => Err(EditorError::InvalidRange(format!(
-                "Unknown command: {}",
+                "Unrecognized command {}. The allowed commands for the str_replace_editor tool are: view, create, str_replace, insert, delete, undo_edit",
                 input.command
             ))),
         }
@@ -197,7 +199,7 @@ impl Editor {
 
         if insert_line < 0 || insert_line > lines.len() as i32 {
             return Err(EditorError::InvalidRange(format!(
-                "Invalid insert_line parameter: {}. It should be within the range of lines of the file: [0, {}]",
+                "Invalid `insert_line` parameter: {}. It should be within the range of lines of the file: [0, {}]",
                 insert_line,
                 lines.len()
             )));
@@ -269,26 +271,38 @@ impl Editor {
         if let Some(range) = view_range {
             if range.len() != 2 {
                 return Err(EditorError::InvalidRange(
-                    "Range must have exactly two elements".into(),
+                    "Invalid `view_range`. It should be a list of two integers.".into(),
                 ));
             }
 
             let [start, end] = [range[0], range[1]];
             if start < 1 || start as usize > lines.len() {
                 return Err(EditorError::InvalidRange(format!(
-                    "Start line {} out of range 1..{}",
+                    "Invalid `view_range`: {:?}. Its first element `{}` should be within the range of lines of the file: [1, {}]",
+                    &[start, end],
                     start,
                     lines.len()
                 )));
             }
             // Support -1 as special case to read until the end of file
-            if end != -1 && (end < start || end as usize > lines.len()) {
-                return Err(EditorError::InvalidRange(format!(
-                    "End line {} out of range {}..{}",
-                    end,
-                    start,
-                    lines.len()
-                )));
+            if end != -1 {
+                if end < start {
+                    return Err(EditorError::InvalidRange(format!(
+                        "Invalid `view_range`: {:?}. Its second element `{}` should be larger or equal than its first `{}`",
+                        &[start, end],
+                        end,
+                        start
+                    )));
+                }
+
+                if end as usize > lines.len() {
+                    return Err(EditorError::InvalidRange(format!(
+                        "Invalid `view_range`: {:?}. Its second element `{}` should be smaller than the number of lines in the file: `{}`",
+                        &[start, end],
+                        end,
+                        lines.len()
+                    )));
+                }
             }
 
             let end_idx = if end == -1 { lines.len() } else { end as usize };
