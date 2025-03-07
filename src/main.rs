@@ -1,4 +1,5 @@
 use clap::Parser;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 use std::fs;
@@ -31,6 +32,8 @@ enum EditorError {
     MissingFileText,
     #[error("Parameter `delete_range` is required for command: delete")]
     MissingDeleteRange,
+    #[error("Invalid regex pattern: {0}")]
+    InvalidRegex(String),
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
     #[error("Walk error: {0}")]
@@ -57,6 +60,8 @@ struct Input {
     delete_range: Option<Vec<i32>>,
     #[serde(default)]
     allow_multi: Option<bool>,
+    #[serde(default)]
+    use_regex: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -147,7 +152,8 @@ impl Editor {
                     .ok_or_else(|| EditorError::StrReplace("Missing old_str".into()))?;
                 let new_str = input.new_str.unwrap_or_default();
                 let allow_multi = input.allow_multi.unwrap_or(false);
-                self.str_replace(&path, &old_str, &new_str, allow_multi)
+                let use_regex = input.use_regex.unwrap_or(false);
+                self.str_replace(&path, &old_str, &new_str, allow_multi, use_regex)
             }
             "insert" => {
                 let insert_line = input
@@ -349,6 +355,7 @@ impl Editor {
         old_str: &str,
         new_str: &str,
         allow_multi: bool,
+        use_regex: bool,
     ) -> Result<String, EditorError> {
         self.validate_path(path, "str_replace")?;
 
@@ -359,70 +366,129 @@ impl Editor {
         }
 
         let content = fs::read_to_string(path)?;
-        let matches: Vec<_> = content.match_indices(old_str).collect();
 
-        match matches.len() {
-            0 => Err(EditorError::StrReplace(format!(
-                "No replacement was performed, old_str `{}` did not appear verbatim in {}",
-                old_str,
-                path.display()
-            ))),
-            1 => {
-                let new_content = content.replace(old_str, new_str);
-                fs::write(path, &new_content)?;
+        if use_regex {
+            // Use regex for matching and replacement
+            let regex =
+                Regex::new(old_str).map_err(|e| EditorError::InvalidRegex(e.to_string()))?;
 
-                // Calculate context for the edit
-                let prefix = &content[..matches[0].0];
-                let line_num = prefix.chars().filter(|&c| c == '\n').count() + 1;
+            if !regex.is_match(&content) {
+                return Err(EditorError::StrReplace(format!(
+                    "No replacement was performed, regex pattern `{}` did not match anything in {}",
+                    old_str,
+                    path.display()
+                )));
+            }
 
-                // Ensure we don't underflow when calculating context_start
-                let context_start = if line_num > 4 { line_num - 4 } else { 1 };
+            // Count matches
+            let matches_count = regex.find_iter(&content).count();
+            let first_match = regex.find(&content).unwrap();
 
-                let mut context = String::new();
-                new_content
-                    .lines()
-                    .enumerate()
-                    .skip(context_start - 1)
-                    .take(8 + new_str.chars().filter(|&c| c == '\n').count())
-                    .fold(&mut context, |acc, (i, line)| {
-                        let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
-                        acc
-                    });
+            if matches_count > 1 && !allow_multi {
+                return Err(EditorError::InvalidRange(format!(
+                    "Multiple occurrences ({}) matching regex `{}` found. Use allow_multi=true to replace all occurrences.",
+                    matches_count, old_str
+                )));
+            }
 
+            // Perform the replacement
+            let new_content = regex.replace_all(&content, new_str).to_string();
+            fs::write(path, &new_content)?;
+
+            // Calculate context for the edit
+            let prefix = &content[..first_match.start()];
+            let line_num = prefix.chars().filter(|&c| c == '\n').count() + 1;
+            let context_start = if line_num > 4 { line_num - 4 } else { 1 };
+
+            let mut context = String::new();
+            new_content
+                .lines()
+                .enumerate()
+                .skip(context_start - 1)
+                .take(8 + new_str.chars().filter(|&c| c == '\n').count())
+                .fold(&mut context, |acc, (i, line)| {
+                    let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
+                    acc
+                });
+
+            if matches_count > 1 {
                 Ok(format!(
-                    "The file {} has been edited.\nHere's the result of running `cat -n` on a snippet:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
-                    path.display(), context
+                    "The file {} has been edited. Made {} replacements using regex pattern \"{}\".\nHere's the result of running `cat -n` on a snippet of the first replacement:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
+                    path.display(), matches_count, old_str, context
+                ))
+            } else {
+                Ok(format!(
+                    "The file {} has been edited using regex pattern \"{}\".\nHere's the result of running `cat -n` on a snippet:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
+                    path.display(), old_str, context
                 ))
             }
-            count if allow_multi => {
-                let new_content = content.replace(old_str, new_str);
-                fs::write(path, &new_content)?;
+        } else {
+            // Use simple string matching
+            let matches: Vec<_> = content.match_indices(old_str).collect();
 
-                // For multi-replacements, just show the first match for context
-                let prefix = &content[..matches[0].0];
-                let line_num = prefix.chars().filter(|&c| c == '\n').count() + 1;
-                let context_start = if line_num > 4 { line_num - 4 } else { 1 };
+            match matches.len() {
+                0 => Err(EditorError::StrReplace(format!(
+                    "No replacement was performed, old_str `{}` did not appear verbatim in {}",
+                    old_str,
+                    path.display()
+                ))),
+                1 => {
+                    let new_content = content.replace(old_str, new_str);
+                    fs::write(path, &new_content)?;
 
-                let mut context = String::new();
-                new_content
-                    .lines()
-                    .enumerate()
-                    .skip(context_start - 1)
-                    .take(8 + new_str.chars().filter(|&c| c == '\n').count())
-                    .fold(&mut context, |acc, (i, line)| {
-                        let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
-                        acc
-                    });
+                    // Calculate context for the edit
+                    let prefix = &content[..matches[0].0];
+                    let line_num = prefix.chars().filter(|&c| c == '\n').count() + 1;
 
-                Ok(format!(
-                    "The file {} has been edited. Made {} replacements of \"{}\".\nHere's the result of running `cat -n` on a snippet of the first replacement:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
-                    path.display(), count, old_str, context
-                ))
+                    // Ensure we don't underflow when calculating context_start
+                    let context_start = if line_num > 4 { line_num - 4 } else { 1 };
+
+                    let mut context = String::new();
+                    new_content
+                        .lines()
+                        .enumerate()
+                        .skip(context_start - 1)
+                        .take(8 + new_str.chars().filter(|&c| c == '\n').count())
+                        .fold(&mut context, |acc, (i, line)| {
+                            let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
+                            acc
+                        });
+
+                    Ok(format!(
+                        "The file {} has been edited.\nHere's the result of running `cat -n` on a snippet:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
+                        path.display(), context
+                    ))
+                }
+                count if allow_multi => {
+                    let new_content = content.replace(old_str, new_str);
+                    fs::write(path, &new_content)?;
+
+                    // For multi-replacements, just show the first match for context
+                    let prefix = &content[..matches[0].0];
+                    let line_num = prefix.chars().filter(|&c| c == '\n').count() + 1;
+                    let context_start = if line_num > 4 { line_num - 4 } else { 1 };
+
+                    let mut context = String::new();
+                    new_content
+                        .lines()
+                        .enumerate()
+                        .skip(context_start - 1)
+                        .take(8 + new_str.chars().filter(|&c| c == '\n').count())
+                        .fold(&mut context, |acc, (i, line)| {
+                            let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
+                            acc
+                        });
+
+                    Ok(format!(
+                        "The file {} has been edited. Made {} replacements of \"{}\".\nHere's the result of running `cat -n` on a snippet of the first replacement:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
+                        path.display(), count, old_str, context
+                    ))
+                }
+                _ => Err(EditorError::InvalidRange(format!(
+                    "Multiple occurrences ({}) of old_str `{}` found. Use allow_multi=true to replace all occurrences.",
+                    matches.len(), old_str
+                ))),
             }
-            _ => Err(EditorError::InvalidRange(format!(
-                "Multiple occurrences ({}) of old_str `{}` found. Use allow_multi=true to replace all occurrences.",
-                matches.len(), old_str
-            ))),
         }
     }
 

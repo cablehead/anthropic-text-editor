@@ -18,6 +18,7 @@ fn create_test_input(command: &str, path: &str) -> Request {
             file_text: None,
             delete_range: None,
             allow_multi: None,
+            use_regex: None,
         },
     }
 }
@@ -215,6 +216,61 @@ fn test_str_replace_multiple_allowed() {
     // Check file content
     let content = fs::read_to_string(file.path()).unwrap();
     assert_eq!(content.trim(), "Test example example");
+}
+
+#[test]
+fn test_str_replace_with_regex() {
+    let mut editor = Editor::new();
+    let file = create_test_file("Test123");
+
+    let mut input = create_test_input("str_replace", file.path().to_str().unwrap());
+    input.input.old_str = Some(r"Test\d+".to_string());
+    input.input.new_str = Some("Example".to_string());
+    input.input.use_regex = Some(true);
+
+    let result = editor.handle_command(input.input).unwrap();
+
+    // Check for success message
+    assert!(result.contains("edited using regex pattern"));
+
+    // Check file content
+    let content = fs::read_to_string(file.path()).unwrap();
+    assert_eq!(content.trim(), "Example");
+}
+
+#[test]
+fn test_str_replace_with_regex_multi() {
+    let mut editor = Editor::new();
+    let file = create_test_file("Test123 Test456 Test789");
+
+    let mut input = create_test_input("str_replace", file.path().to_str().unwrap());
+    input.input.old_str = Some(r"Test\d+".to_string());
+    input.input.new_str = Some("Example".to_string());
+    input.input.use_regex = Some(true);
+    input.input.allow_multi = Some(true);
+
+    let result = editor.handle_command(input.input).unwrap();
+
+    // Check for success message
+    assert!(result.contains("Made 3 replacements using regex pattern"));
+
+    // Check file content (should replace all matches)
+    let content = fs::read_to_string(file.path()).unwrap();
+    assert_eq!(content.trim(), "Example Example Example");
+}
+
+#[test]
+fn test_str_replace_invalid_regex() {
+    let mut editor = Editor::new();
+    let file = create_test_file("Test content");
+
+    let mut input = create_test_input("str_replace", file.path().to_str().unwrap());
+    input.input.old_str = Some(r"Test[".to_string()); // Invalid regex (unclosed character class)
+    input.input.new_str = Some("Example".to_string());
+    input.input.use_regex = Some(true);
+
+    let result = editor.handle_command(input.input);
+    assert!(matches!(result, Err(EditorError::InvalidRegex(_))));
 }
 
 #[test]

@@ -15,7 +15,7 @@ edit files. It communicates through a JSON protocol over stdin/stdout.
 
 - **view**: View file contents or directory listings
 - **create**: Create a new file with provided content
-- **str_replace**: Replace a specific string in a file (with support for multiple replacements)
+- **str_replace**: Replace a specific string in a file (supports multiple replacements and regex patterns)
 - **insert**: Insert text at a specific line in a file
 - **delete**: Delete a range of lines from a file
 
@@ -47,6 +47,7 @@ stdout:
     "old_str": "text to replace", // Required for str_replace
     "new_str": "replacement text", // Optional for str_replace, required for insert
     "allow_multi": true, // Optional, for str_replace to allow multiple replacements
+    "use_regex": true, // Optional, for str_replace to use regex pattern matching
     "delete_range": [1, 5], // Required for delete, specifies line range to remove
     "insert_line": 5, // Required for insert
     "file_text": "content" // Required for create
