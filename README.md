@@ -15,8 +15,9 @@ edit files. It communicates through a JSON protocol over stdin/stdout.
 
 - **view**: View file contents or directory listings
 - **create**: Create a new file with provided content
-- **str_replace**: Replace a specific string in a file
+- **str_replace**: Replace a specific string in a file (with support for multiple replacements)
 - **insert**: Insert text at a specific line in a file
+- **delete**: Delete a range of lines from a file
 
 ## Unsupported Commands
 
@@ -39,12 +40,14 @@ stdout:
 ```json
 {
   "input": {
-    "command": "view|create|str_replace|insert",
+    "command": "view|create|str_replace|insert|delete",
     "path": "/absolute/path/to/file",
     "view_range": [1, 10], // Optional, for view command on files
     "max_depth": 3, // Optional, for view command on directories (defaults to 3)
     "old_str": "text to replace", // Required for str_replace
     "new_str": "replacement text", // Optional for str_replace, required for insert
+    "allow_multi": true, // Optional, for str_replace to allow multiple replacements
+    "delete_range": [1, 5], // Required for delete, specifies line range to remove
     "insert_line": 5, // Required for insert
     "file_text": "content" // Required for create
   }

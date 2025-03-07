@@ -29,6 +29,8 @@ enum EditorError {
     FileAlreadyExists(PathBuf),
     #[error("Parameter `file_text` is required for command: create")]
     MissingFileText,
+    #[error("Parameter `delete_range` is required for command: delete")]
+    MissingDeleteRange,
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
     #[error("Walk error: {0}")]
@@ -51,6 +53,10 @@ struct Input {
     insert_line: Option<i32>,
     #[serde(default)]
     file_text: Option<String>,
+    #[serde(default)]
+    delete_range: Option<Vec<i32>>,
+    #[serde(default)]
+    allow_multi: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,7 +146,8 @@ impl Editor {
                     .old_str
                     .ok_or_else(|| EditorError::StrReplace("Missing old_str".into()))?;
                 let new_str = input.new_str.unwrap_or_default();
-                self.str_replace(&path, &old_str, &new_str)
+                let allow_multi = input.allow_multi.unwrap_or(false);
+                self.str_replace(&path, &old_str, &new_str, allow_multi)
             }
             "insert" => {
                 let insert_line = input
@@ -150,6 +157,12 @@ impl Editor {
                     .new_str
                     .ok_or_else(|| EditorError::InvalidRange("Missing new_str".into()))?;
                 self.insert(&path, insert_line, &new_str)
+            }
+            "delete" => {
+                let delete_range = input
+                    .delete_range
+                    .ok_or_else(|| EditorError::MissingDeleteRange)?;
+                self.delete(&path, &delete_range)
             }
             "undo_edit" => Err(EditorError::UndoNotImplemented),
             _ => Err(EditorError::InvalidRange(format!(
@@ -335,6 +348,7 @@ impl Editor {
         path: &Path,
         old_str: &str,
         new_str: &str,
+        allow_multi: bool,
     ) -> Result<String, EditorError> {
         self.validate_path(path, "str_replace")?;
 
@@ -380,11 +394,101 @@ impl Editor {
                     path.display(), context
                 ))
             }
+            count if allow_multi => {
+                let new_content = content.replace(old_str, new_str);
+                fs::write(path, &new_content)?;
+
+                // For multi-replacements, just show the first match for context
+                let prefix = &content[..matches[0].0];
+                let line_num = prefix.chars().filter(|&c| c == '\n').count() + 1;
+                let context_start = if line_num > 4 { line_num - 4 } else { 1 };
+
+                let mut context = String::new();
+                new_content
+                    .lines()
+                    .enumerate()
+                    .skip(context_start - 1)
+                    .take(8 + new_str.chars().filter(|&c| c == '\n').count())
+                    .fold(&mut context, |acc, (i, line)| {
+                        let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
+                        acc
+                    });
+
+                Ok(format!(
+                    "The file {} has been edited. Made {} replacements of \"{}\".\nHere's the result of running `cat -n` on a snippet of the first replacement:\n{}\n\nReview the changes and make sure they are as expected. Edit the file again if necessary.",
+                    path.display(), count, old_str, context
+                ))
+            }
             _ => Err(EditorError::InvalidRange(format!(
-                "Multiple occurrences of old_str `{}` found. Please ensure it is unique",
-                old_str
+                "Multiple occurrences ({}) of old_str `{}` found. Use allow_multi=true to replace all occurrences.",
+                matches.len(), old_str
             ))),
         }
+    }
+
+    fn delete(&mut self, path: &Path, delete_range: &[i32]) -> Result<String, EditorError> {
+        self.validate_path(path, "delete")?;
+
+        if path.is_dir() {
+            return Err(EditorError::InvalidRange(
+                "Cannot perform delete on directory".into(),
+            ));
+        }
+
+        if delete_range.len() != 2 {
+            return Err(EditorError::InvalidRange(
+                "Delete range must have exactly two elements".into(),
+            ));
+        }
+
+        let content = fs::read_to_string(path)?;
+        let lines: Vec<_> = content.lines().collect();
+
+        let [start, end] = [delete_range[0], delete_range[1]];
+        if start < 1 || start as usize > lines.len() {
+            return Err(EditorError::InvalidRange(format!(
+                "Start line {} out of range 1..{}",
+                start,
+                lines.len()
+            )));
+        }
+        if end < start || end as usize > lines.len() {
+            return Err(EditorError::InvalidRange(format!(
+                "End line {} out of range {}..{}",
+                end,
+                start,
+                lines.len()
+            )));
+        }
+
+        // Create new content without the deleted range
+        let mut new_lines = Vec::new();
+        new_lines.extend_from_slice(&lines[..(start - 1) as usize]);
+        new_lines.extend_from_slice(&lines[end as usize..]);
+        let new_content = new_lines.join("\n") + "\n";
+
+        // Write the new content
+        fs::write(path, &new_content)?;
+
+        // Calculate context for the edit (show area around deletion)
+        let context_start = (start as usize).saturating_sub(4);
+        let context_end = std::cmp::min(context_start + 8, new_lines.len());
+
+        let mut context = String::new();
+        new_lines
+            .iter()
+            .enumerate()
+            .skip(context_start)
+            .take(context_end - context_start)
+            .fold(&mut context, |acc, (i, line)| {
+                let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
+                acc
+            });
+
+        Ok(format!(
+            "The file {} has been edited. Deleted lines {}-{}.\nHere's the result of running `cat -n` on a snippet around the edit:\n{}\n\nReview the changes and make sure they are as expected.",
+            path.display(), start, end, context
+        ))
     }
 }
 

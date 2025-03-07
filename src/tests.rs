@@ -16,6 +16,8 @@ fn create_test_input(command: &str, path: &str) -> Request {
             new_str: None,
             insert_line: None,
             file_text: None,
+            delete_range: None,
+            allow_multi: None,
         },
     }
 }
@@ -76,7 +78,7 @@ fn test_view_directory_custom_depth() {
     File::create(deep_path.join("level3.txt")).unwrap();
 
     // Test with default depth
-    let mut input = create_test_input("view", dir.path().to_str().unwrap());
+    let input = create_test_input("view", dir.path().to_str().unwrap());
     let result = editor.handle_command(input.input).unwrap();
 
     // Default should show files 2 levels deep
@@ -196,6 +198,26 @@ fn test_str_replace_multiple_occurrences() {
 }
 
 #[test]
+fn test_str_replace_multiple_allowed() {
+    let mut editor = Editor::new();
+    let file = create_test_file("Test test test");
+
+    let mut input = create_test_input("str_replace", file.path().to_str().unwrap());
+    input.input.old_str = Some("test".to_string());
+    input.input.new_str = Some("example".to_string());
+    input.input.allow_multi = Some(true);
+
+    let result = editor.handle_command(input.input).unwrap();
+
+    // Check for success message
+    assert!(result.contains("Made 2 replacements"));
+
+    // Check file content
+    let content = fs::read_to_string(file.path()).unwrap();
+    assert_eq!(content.trim(), "Test example example");
+}
+
+#[test]
 fn test_str_replace_success() {
     let mut editor = Editor::new();
     let file = create_test_file("Original content");
@@ -311,6 +333,55 @@ fn test_path_validation() {
         editor.validate_path(file.path(), "create"),
         Err(EditorError::FileAlreadyExists(_))
     ));
+}
+
+#[test]
+fn test_delete_lines() {
+    let mut editor = Editor::new();
+    let file = create_test_file("Line 1\nLine 2\nLine 3\nLine 4\nLine 5");
+
+    let mut input = create_test_input("delete", file.path().to_str().unwrap());
+    input.input.delete_range = Some(vec![2, 4]);
+
+    let result = editor.handle_command(input.input).unwrap();
+
+    // Check for success message
+    assert!(result.contains("Deleted lines 2-4"));
+
+    // Check file content
+    let content = fs::read_to_string(file.path()).unwrap();
+    assert_eq!(content.trim(), "Line 1\nLine 5");
+}
+
+#[test]
+fn test_delete_missing_range() {
+    let mut editor = Editor::new();
+    let file = create_test_file("Test content");
+
+    let input = create_test_input("delete", file.path().to_str().unwrap());
+
+    let result = editor.handle_command(input.input);
+    assert!(matches!(result, Err(EditorError::MissingDeleteRange)));
+}
+
+#[test]
+fn test_delete_invalid_range() {
+    let mut editor = Editor::new();
+    let file = create_test_file("Line 1\nLine 2\nLine 3");
+
+    // End before start
+    let mut input = create_test_input("delete", file.path().to_str().unwrap());
+    input.input.delete_range = Some(vec![3, 1]);
+
+    let result = editor.handle_command(input.input);
+    assert!(matches!(result, Err(EditorError::InvalidRange(_))));
+
+    // Out of bounds
+    let mut input2 = create_test_input("delete", file.path().to_str().unwrap());
+    input2.input.delete_range = Some(vec![1, 5]);
+
+    let result2 = editor.handle_command(input2.input);
+    assert!(matches!(result2, Err(EditorError::InvalidRange(_))));
 }
 
 #[test]
