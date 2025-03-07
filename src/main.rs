@@ -21,6 +21,8 @@ enum EditorError {
     ViewRangeForDirectory,
     #[error("{0}")]
     StrReplace(String),
+    #[error("The undo_edit command is not implemented in this CLI. Please use git for version control.")]
+    UndoNotImplemented,
     #[error("IO error: {0}")]
     Io(#[from] io::Error),
     #[error("Walk error: {0}")]
@@ -48,24 +50,23 @@ struct Request {
 
 #[derive(Debug, Serialize)]
 struct CliResult {
-    #[serde(skip_serializing_if = "String::is_empty")]
-    output: String,
+    content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
+    is_error: Option<bool>,
 }
 
 impl CliResult {
-    fn success(output: String) -> Self {
+    fn success(content: String) -> Self {
         Self {
-            output,
-            error: None,
+            content,
+            is_error: None,
         }
     }
 
     fn error(err: impl std::error::Error) -> Self {
         Self {
-            output: String::new(),
-            error: Some(err.to_string()),
+            content: err.to_string(),
+            is_error: Some(true),
         }
     }
 }
@@ -77,15 +78,11 @@ struct Cli {
     json: bool,
 }
 
-struct Editor {
-    history: im::HashMap<PathBuf, Vec<String>>,
-}
+struct Editor {}
 
 impl Editor {
     fn new() -> Self {
-        Self {
-            history: im::HashMap::new(),
-        }
+        Self {}
     }
 
     fn validate_path(&self, path: &Path, allow_missing: bool) -> Result<(), EditorError> {
@@ -121,7 +118,7 @@ impl Editor {
                     .ok_or_else(|| EditorError::InvalidRange("Missing new_str".into()))?;
                 self.insert(&path, insert_line, &new_str)
             }
-            "undo_edit" => self.undo_edit(&path),
+            "undo_edit" => Err(EditorError::UndoNotImplemented),
             _ => Err(EditorError::InvalidRange(format!(
                 "Unknown command: {}",
                 input.command
@@ -154,12 +151,6 @@ impl Editor {
             )));
         }
 
-        // Save current content to history
-        self.history
-            .entry(path.to_path_buf())
-            .or_default()
-            .push(content.clone());
-
         // Create new content with inserted line
         let mut new_lines = lines.clone();
         new_lines.insert(insert_line as usize, new_str);
@@ -186,37 +177,8 @@ impl Editor {
         ))
     }
 
-    fn undo_edit(&mut self, path: &Path) -> Result<String, EditorError> {
-        self.validate_path(path, false)?;
-
-        let history = self.history.get_mut(path).ok_or_else(|| {
-            EditorError::InvalidRange(format!("No edit history found for {}", path.display()))
-        })?;
-
-        if let Some(previous_content) = history.pop() {
-            fs::write(path, &previous_content)?;
-
-            let mut display_content = String::new();
-            previous_content
-                .lines()
-                .enumerate()
-                .fold(&mut display_content, |acc, (i, line)| {
-                    let _ = writeln!(acc, "{:6}\t{}", i + 1, line);
-                    acc
-                });
-
-            Ok(format!(
-                "Last edit to {} undone successfully.\nHere's the result of running `cat -n`:\n{}\n",
-                path.display(),
-                display_content
-            ))
-        } else {
-            Err(EditorError::InvalidRange(format!(
-                "No more history available for {}",
-                path.display()
-            )))
-        }
-    }
+    // We'll remove the actual implementation since it's not used
+    // The handle_command method already returns UndoNotImplemented error directly
 
     fn view(&self, path: &Path, view_range: Option<&[i32]>) -> Result<String, EditorError> {
         self.validate_path(path, false)?;
@@ -333,12 +295,6 @@ impl Editor {
                 path.display()
             ))),
             1 => {
-                // Save current content to history
-                self.history
-                    .entry(path.to_path_buf())
-                    .or_default()
-                    .push(content.clone());
-
                 let new_content = content.replace(old_str, new_str);
                 fs::write(path, &new_content)?;
 

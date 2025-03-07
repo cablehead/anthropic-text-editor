@@ -133,7 +133,7 @@ fn test_str_replace_nonexistent() {
     assert_eq!(
         json,
         format!(
-            r#"{{"error":"No replacement was performed, old_str `Nonexistent` did not appear verbatim in {}"}}"#,
+            r#"{{"content":"No replacement was performed, old_str `Nonexistent` did not appear verbatim in {}","is_error":true}}"#,
             file.path().display()
         )
     );
@@ -153,7 +153,7 @@ fn test_str_replace_multiple_occurrences() {
 }
 
 #[test]
-fn test_str_replace_history() {
+fn test_str_replace_success() {
     let mut editor = Editor::new();
     let file = create_test_file("Original content");
     let path = file.path().to_path_buf();
@@ -162,9 +162,11 @@ fn test_str_replace_history() {
     input.input.old_str = Some("Original".to_string());
     input.input.new_str = Some("New".to_string());
 
-    editor.handle_command(input.input).unwrap();
-
-    assert_eq!(editor.history.get(&path).unwrap()[0], "Original content\n");
+    let result = editor.handle_command(input.input).unwrap();
+    assert!(result.contains("has been edited"));
+    
+    let content = fs::read_to_string(path).unwrap();
+    assert_eq!(content.trim(), "New content");
 }
 
 // Insert command tests
@@ -231,34 +233,17 @@ fn test_insert_invalid_line() {
 }
 
 #[test]
-fn test_undo_str_replace() {
+fn test_undo_not_implemented() {
     let mut editor = Editor::new();
     let file = create_test_file("Original content");
     let path = file.path().to_str().unwrap();
 
-    // First do a str_replace
-    let mut input = create_test_input("str_replace", path);
-    input.input.old_str = Some("Original".to_string());
-    input.input.new_str = Some("New".to_string());
-    editor.handle_command(input.input).unwrap();
-
-    // Then undo it
+    // Try to use undo_edit
     let input = create_test_input("undo_edit", path);
-    let result = editor.handle_command(input.input).unwrap();
-
-    assert!(result.contains("undone successfully"));
-    let content = fs::read_to_string(file.path()).unwrap();
-    assert_eq!(content.trim(), "Original content");
-}
-
-#[test]
-fn test_undo_no_history() {
-    let mut editor = Editor::new();
-    let file = create_test_file("");
-    let input = create_test_input("undo_edit", file.path().to_str().unwrap());
-
     let result = editor.handle_command(input.input);
-    assert!(matches!(result, Err(EditorError::InvalidRange(_)))); // or a specific NoHistory error
+
+    // Should get UndoNotImplemented error
+    assert!(matches!(result, Err(EditorError::UndoNotImplemented)));
 }
 
 #[test]
