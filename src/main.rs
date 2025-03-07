@@ -42,6 +42,8 @@ struct Input {
     #[serde(default)]
     view_range: Option<Vec<i32>>,
     #[serde(default)]
+    max_depth: Option<usize>,
+    #[serde(default)]
     old_str: Option<String>,
     #[serde(default)]
     new_str: Option<String>,
@@ -126,7 +128,7 @@ impl Editor {
         let path = PathBuf::from(&input.path);
 
         match input.command.as_str() {
-            "view" => self.view(&path, input.view_range.as_deref()),
+            "view" => self.view(&path, input.view_range.as_deref(), input.max_depth),
             "create" => {
                 let file_text = input
                     .file_text
@@ -226,14 +228,19 @@ impl Editor {
     // We'll remove the actual implementation since it's not used
     // The handle_command method already returns UndoNotImplemented error directly
 
-    fn view(&self, path: &Path, view_range: Option<&[i32]>) -> Result<String, EditorError> {
+    fn view(
+        &self,
+        path: &Path,
+        view_range: Option<&[i32]>,
+        max_depth: Option<usize>,
+    ) -> Result<String, EditorError> {
         self.validate_path(path, "view")?;
 
         if path.is_dir() {
             if view_range.is_some() {
                 return Err(EditorError::ViewRangeForDirectory);
             }
-            let output = self.view_directory(path)?;
+            let output = self.view_directory(path, max_depth)?;
             return Ok(output);
         }
 
@@ -296,22 +303,28 @@ impl Editor {
         }
     }
 
-    fn view_directory(&self, path: &Path) -> Result<String, EditorError> {
+    fn view_directory(&self, path: &Path, max_depth: Option<usize>) -> Result<String, EditorError> {
         use walkdir::WalkDir;
+
+        // Default to 3 levels deep (path + 2 more levels) if not specified
+        let max_depth = max_depth.unwrap_or(3);
 
         let mut output = vec![];
         for entry in WalkDir::new(path)
             .min_depth(1)
-            .max_depth(2)
+            .max_depth(max_depth)
             .into_iter()
             .filter_entry(|e| !e.file_name().to_str().map_or(false, |s| s.starts_with(".")))
         {
             let entry = entry?;
-            output.push(entry.path().to_string_lossy().into_owned());
+            // Get path relative to the starting directory for cleaner output
+            let rel_path = entry.path().strip_prefix(path).unwrap_or(entry.path());
+            output.push(rel_path.to_string_lossy().into_owned());
         }
 
         Ok(format!(
-            "Here's the files and directories up to 2 levels deep in {}, excluding hidden items:\n{}\n",
+            "Here's the files and directories up to {} levels deep in {}, excluding hidden items:\n{}\n",
+            max_depth - 1, // Adjust for user-friendly display (3 -> "2 levels deep")
             path.display(),
             output.join("\n")
         ))

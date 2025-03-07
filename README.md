@@ -41,7 +41,8 @@ stdout:
   "input": {
     "command": "view|create|str_replace|insert",
     "path": "/absolute/path/to/file",
-    "view_range": [1, 10], // Optional, for view command
+    "view_range": [1, 10], // Optional, for view command on files
+    "max_depth": 3, // Optional, for view command on directories (defaults to 3)
     "old_str": "text to replace", // Required for str_replace
     "new_str": "replacement text", // Optional for str_replace, required for insert
     "insert_line": 5, // Required for insert

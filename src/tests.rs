@@ -11,6 +11,7 @@ fn create_test_input(command: &str, path: &str) -> Request {
             command: command.to_string(),
             path: path.to_string(),
             view_range: None,
+            max_depth: None,
             old_str: None,
             new_str: None,
             insert_line: None,
@@ -53,6 +54,47 @@ fn test_view_directory() {
 
     assert!(result.contains("file1.txt"));
     assert!(result.contains("file2.txt"));
+}
+
+#[test]
+fn test_view_directory_custom_depth() {
+    let mut editor = Editor::new();
+    let dir = tempdir().unwrap();
+
+    // Create test files with nested directories
+    let subdir_path = dir.path().join("subdir");
+    fs::create_dir(&subdir_path).unwrap();
+    let nested_path = subdir_path.join("nested");
+    fs::create_dir(&nested_path).unwrap();
+    let deep_path = nested_path.join("deep");
+    fs::create_dir(&deep_path).unwrap();
+
+    // Create file at each level
+    File::create(dir.path().join("root.txt")).unwrap();
+    File::create(subdir_path.join("level1.txt")).unwrap();
+    File::create(nested_path.join("level2.txt")).unwrap();
+    File::create(deep_path.join("level3.txt")).unwrap();
+
+    // Test with default depth
+    let mut input = create_test_input("view", dir.path().to_str().unwrap());
+    let result = editor.handle_command(input.input).unwrap();
+
+    // Default should show files 2 levels deep
+    assert!(result.contains("root.txt"));
+    assert!(result.contains("level1.txt"));
+    assert!(result.contains("level2.txt"));
+    assert!(!result.contains("level3.txt"));
+
+    // Test with increased depth
+    let mut deep_input = create_test_input("view", dir.path().to_str().unwrap());
+    deep_input.input.max_depth = Some(4);
+    let deep_result = editor.handle_command(deep_input.input).unwrap();
+
+    // Should now show all files including level3
+    assert!(deep_result.contains("root.txt"));
+    assert!(deep_result.contains("level1.txt"));
+    assert!(deep_result.contains("level2.txt"));
+    assert!(deep_result.contains("level3.txt"));
 }
 
 #[test]
