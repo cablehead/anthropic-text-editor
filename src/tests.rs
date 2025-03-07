@@ -409,27 +409,27 @@ mod validation_tests {
 
         // Test relative path
         assert!(matches!(
-            editor.validate_path(Path::new("relative/path.txt"), "view"),
+            editor.validate_path_internal(Path::new("relative/path.txt"), &Command::View),
             Err(EditorError::NotAbsolutePath(_))
         ));
 
         // Test non-existent path for view command
         assert!(matches!(
-            editor.validate_path(Path::new("/nonexistent/file.txt"), "view"),
+            editor.validate_path_internal(Path::new("/nonexistent/file.txt"), &Command::View),
             Err(EditorError::PathNotFound(_))
         ));
 
         // Test existing path for create command
         let file = NamedTempFile::new().unwrap();
         assert!(matches!(
-            editor.validate_path(file.path(), "create"),
+            editor.validate_path_internal(file.path(), &Command::Create),
             Err(EditorError::FileAlreadyExists(_))
         ));
 
         // Test using command other than view on directory
         let dir = tempdir().unwrap();
         assert!(matches!(
-            editor.validate_path(dir.path(), "str_replace"),
+            editor.validate_path_internal(dir.path(), &Command::StrReplace),
             Err(EditorError::InvalidRange(_))
         ));
     }

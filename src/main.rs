@@ -185,28 +185,7 @@ impl Editor {
         Self {}
     }
 
-    // Overloaded validate_path that accepts either Command enum or string
-    fn validate_path<T: AsRef<str>>(&self, path: &Path, command: T) -> Result<(), EditorError> {
-        let cmd_str = command.as_ref();
-        let cmd = match cmd_str {
-            "view" => Command::View,
-            "create" => Command::Create,
-            "str_replace" => Command::StrReplace,
-            "insert" => Command::Insert,
-            "delete" => Command::Delete,
-            "undo_edit" => Command::UndoEdit,
-            // If we get a string that's not a valid command, convert to enum first
-            _ => match Command::from_str(cmd_str) {
-                Ok(cmd) => cmd,
-                Err(_) => return Err(EditorError::UnknownCommand(cmd_str.to_string())),
-            },
-        };
-
-        // Continue with validation
-        self.validate_path_internal(path, &cmd)
-    }
-
-    // Internal method that works with Command enum
+    // Method that validates paths based on command type
     fn validate_path_internal(&self, path: &Path, command: &Command) -> Result<(), EditorError> {
         // Check if it's an absolute path
         if !path.is_absolute() {
