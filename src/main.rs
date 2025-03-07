@@ -281,7 +281,8 @@ impl Editor {
                     lines.len()
                 )));
             }
-            if end < start || end as usize > lines.len() {
+            // Support -1 as special case to read until the end of file
+            if end != -1 && (end < start || end as usize > lines.len()) {
                 return Err(EditorError::InvalidRange(format!(
                     "End line {} out of range {}..{}",
                     end,
@@ -290,8 +291,10 @@ impl Editor {
                 )));
             }
 
+            let end_idx = if end == -1 { lines.len() } else { end as usize };
+
             let mut result = String::new();
-            lines[(start - 1) as usize..end as usize]
+            lines[(start - 1) as usize..end_idx]
                 .iter()
                 .enumerate()
                 .fold(&mut result, |acc, (i, line)| {

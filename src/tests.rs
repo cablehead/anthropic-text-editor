@@ -117,6 +117,22 @@ fn test_view_file_with_range() {
 }
 
 #[test]
+fn test_view_file_with_negative_end() {
+    let mut editor = Editor::new();
+    let file = create_test_file("Line 1\nLine 2\nLine 3\nLine 4");
+
+    let mut input = create_test_input("view", file.path().to_str().unwrap());
+    input.input.view_range = Some(vec![2, -1]);
+
+    let result = editor.handle_command(input.input).unwrap();
+
+    assert!(result.contains("Line 2"));
+    assert!(result.contains("Line 3"));
+    assert!(result.contains("Line 4"));
+    assert!(!result.contains("Line 1"));
+}
+
+#[test]
 fn test_view_file_invalid_range() {
     let mut editor = Editor::new();
     let file = create_test_file("Line 1\nLine 2\nLine 3\nLine 4");
