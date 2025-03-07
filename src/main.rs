@@ -21,7 +21,9 @@ enum EditorError {
     ViewRangeForDirectory,
     #[error("{0}")]
     StrReplace(String),
-    #[error("The undo_edit command is not implemented in this CLI. Please use git for version control.")]
+    #[error(
+        "The undo_edit command is not implemented in this CLI. Please use git for version control."
+    )]
     UndoNotImplemented,
     #[error("IO error: {0}")]
     Io(#[from] io::Error),

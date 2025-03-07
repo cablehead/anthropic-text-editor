@@ -164,7 +164,7 @@ fn test_str_replace_success() {
 
     let result = editor.handle_command(input.input).unwrap();
     assert!(result.contains("has been edited"));
-    
+
     let content = fs::read_to_string(path).unwrap();
     assert_eq!(content.trim(), "New content");
 }
