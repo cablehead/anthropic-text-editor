@@ -80,15 +80,16 @@ impl CliResult {
 }
 
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
-struct Cli {
-    #[arg(short, long)]
-    json: bool,
-}
+#[command(author, version, about = "Anthropic text editor for Claude")]
+struct Cli {}
 
 struct Editor {}
 
 impl Editor {
+    /// Creates a new Editor instance
+    ///
+    /// The Editor is responsible for handling file system operations
+    /// requested by Claude.
     fn new() -> Self {
         Self {}
     }
@@ -375,22 +376,19 @@ impl Editor {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = Cli::parse();
+    // Parse arguments, but we don't use any currently
+    let _cli = Cli::parse();
 
-    if cli.json {
-        let mut editor = Editor::new();
-        let stdin = io::stdin().lock();
-        let request: Request = serde_json::from_reader(stdin)?;
+    let mut editor = Editor::new();
+    let stdin = io::stdin().lock();
+    let request: Request = serde_json::from_reader(stdin)?;
 
-        let result = match editor.handle_command(request.input) {
-            Ok(output) => CliResult::success(output),
-            Err(err) => CliResult::error(err),
-        };
+    let result = match editor.handle_command(request.input) {
+        Ok(output) => CliResult::success(output),
+        Err(err) => CliResult::error(err),
+    };
 
-        println!("{}", serde_json::to_string(&result)?);
-    } else {
-        println!("Please run with --json flag for JSON protocol mode");
-    }
+    println!("{}", serde_json::to_string(&result)?);
 
     Ok(())
 }
