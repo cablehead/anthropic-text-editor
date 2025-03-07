@@ -12,7 +12,7 @@ mod test_helpers {
     pub fn create_test_input(command: &str, path: &str) -> Request {
         Request {
             input: Input {
-                command: command.to_string(),
+                command: Command::from_str(command).unwrap_or(Command::View),
                 path: path.to_string(),
                 view_range: None,
                 max_depth: None,
@@ -392,18 +392,14 @@ mod validation_tests {
 
     #[test]
     fn test_invalid_command() {
-        let mut editor = Editor::new();
-        let file = create_test_file("Test content");
+        // We don't need any file for this test anymore, just testing the Command::from_str directly
 
-        // Use an invalid command
-        let input = create_test_input("invalid_command", file.path().to_str().unwrap());
+        // Test just the invalid command handling directly
+        let cmd_result = Command::from_str("invalid_command");
+        assert!(matches!(cmd_result, Err(EditorError::UnknownCommand(_))));
 
-        let result = editor.handle_command(input.input);
-        assert!(matches!(result, Err(EditorError::InvalidRange(_))));
-
-        if let Err(EditorError::InvalidRange(msg)) = result {
-            assert!(msg.contains("Unrecognized command"));
-            assert!(msg.contains("allowed commands"));
+        if let Err(EditorError::UnknownCommand(cmd)) = cmd_result {
+            assert_eq!(cmd, "invalid_command");
         }
     }
 
