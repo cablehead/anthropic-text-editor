@@ -2,6 +2,15 @@
 name = "anthropic-text-editor"
 version = "0.1.0"
 edition = "2021"
+description = "A micro-CLI to apply tool calls from Anthropic for their text_editor_20250124 built-in computer use tool"
+authors = ["Andy Gayton <andy@cablehead.org>"]
+repository = "https://github.com/cablehead/anthropic-text-editor"
+homepage = "https://github.com/cablehead/anthropic-text-editor"
+documentation = "https://github.com/cablehead/anthropic-text-editor"
+license = "MIT"
+keywords = ["anthropic", "claude", "text-editor", "tool-calls", "cli"]
+categories = ["command-line-utilities", "text-processing"]
+readme = "README.md"
 
 [dependencies]
 clap = { version = "4.5.27", features = ["derive"] }
