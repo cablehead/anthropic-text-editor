@@ -11,6 +11,12 @@ This implements the `text_editor_20250124` tool described in the
 This CLI tool provides file system operations for Claude to view, create, and
 edit files. It communicates through a JSON protocol over stdin/stdout.
 
+## Install
+
+```bash
+cargo install --locked anthropic-text-editor
+```
+
 ## Supported Commands
 
 - **view**: View file contents or directory listings
@@ -68,4 +74,32 @@ stdout:
 
 ```
 cat input.json | anthropic-text-editor
+```
+
+### Quick Examples
+
+```bash
+# View a file
+echo '{"input":{"command":"view","path":"/path/to/file.txt"}}' | anthropic-text-editor
+
+# Create a new file
+echo '{"input":{"command":"create","path":"/path/to/new.txt","file_text":"Hello world"}}' | anthropic-text-editor
+
+# Replace text in a file
+echo '{"input":{"command":"str_replace","path":"/path/to/file.txt","old_str":"foo","new_str":"bar"}}' | anthropic-text-editor
+```
+
+### Example: Adding Content to README
+
+Here's a meta example that shows how to use the tool to modify this README:
+
+```json
+{
+  "input": {
+    "command": "str_replace",
+    "path": "/path/to/README.md",
+    "old_str": "## Usage\n\n```\ncat input.json | anthropic-text-editor\n```",
+    "new_str": "## Usage\n\n```\ncat input.json | anthropic-text-editor\n```\n\n### Quick Examples\n\n```bash\n# View a file\necho '{\"input\":{\"command\":\"view\",\"path\":\"/path/to/file.txt\"}}' | anthropic-text-editor\n\n# Create a new file\necho '{\"input\":{\"command\":\"create\",\"path\":\"/path/to/new.txt\",\"file_text\":\"Hello world\"}}' | anthropic-text-editor\n\n# Replace text in a file\necho '{\"input\":{\"command\":\"str_replace\",\"path\":\"/path/to/file.txt\",\"old_str\":\"foo\",\"new_str\":\"bar\"}}' | anthropic-text-editor\n```"
+  }
+}
 ```
