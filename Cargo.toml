@@ -1,6 +1,6 @@
 [package]
 name = "anthropic-text-editor"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A micro-CLI to apply tool calls from Anthropic for their text_editor_20250124 built-in computer use tool"
 authors = ["Andy Gayton <andy@cablehead.org>"]
