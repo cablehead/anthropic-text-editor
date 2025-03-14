@@ -19,7 +19,7 @@ cargo install --locked anthropic-text-editor
 
 ## Supported Commands
 
-- **view**: View file contents or directory listings
+- **view**: View file contents with line numbers (like `cat -n`) or directory listings
 - **create**: Create a new file with provided content
 - **str_replace**: Replace a specific string in a file (supports multiple replacements and regex patterns)
 - **insert**: Insert text at a specific line in a file
@@ -68,6 +68,12 @@ stdout:
   "content": "result of the operation",
   "is_error": true // Present only on error
 }
+```
+
+For the `view` command on files, the output includes line numbers:
+
+```
+"content": "Here's the result of running `cat -n` on /path/to/file.txt:\n     1\tLine 1\n     2\tLine 2\n     3\tLine 3\n"
 ```
 
 ## Usage

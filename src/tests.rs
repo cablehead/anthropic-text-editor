@@ -71,7 +71,8 @@ mod view_tests {
         let result = handle_command(input.input).unwrap();
 
         assert_success_contains(&result, "File content");
-        // No line numbers in the new implementation
+        assert_success_contains(&result, "Here's the result of running `cat -n`");
+        assert_success_contains(&result, "     1\tFile content");
     }
 
     #[test]
@@ -144,6 +145,11 @@ mod view_tests {
         assert_success_contains(&result, "Line 3");
         assert!(!result.contains("Line 1"));
         assert!(!result.contains("Line 4"));
+
+        // Check for line numbers
+        assert_success_contains(&result, "     2\tLine 2");
+        assert_success_contains(&result, "     3\tLine 3");
+        assert_success_contains(&result, "Here's the result of running `cat -n`");
     }
 
     #[test]
@@ -159,6 +165,12 @@ mod view_tests {
         assert_success_contains(&result, "Line 3");
         assert_success_contains(&result, "Line 4");
         assert!(!result.contains("Line 1"));
+
+        // Check for line numbers
+        assert_success_contains(&result, "     2\tLine 2");
+        assert_success_contains(&result, "     3\tLine 3");
+        assert_success_contains(&result, "     4\tLine 4");
+        assert_success_contains(&result, "Here's the result of running `cat -n`");
     }
 
     #[test]

@@ -345,13 +345,40 @@ pub fn view(
 
             // Get the specified range, clamping end to the actual line count
             let end_idx = (adjusted_end as usize + 1).min(lines.len());
-            let sliced_lines = &lines[adjusted_start as usize..end_idx];
-            Ok(sliced_lines.join("\n"))
+
+            // Format with line numbers, starting at the adjusted_start + 1 (to match 1-based line numbering)
+            let init_line = adjusted_start + 1;
+            let formatted_lines = format_with_line_numbers(
+                &lines[adjusted_start as usize..end_idx],
+                init_line as usize,
+            );
+
+            Ok(format!(
+                "Here's the result of running `cat -n` on {}:\n{}\n",
+                path.display(),
+                formatted_lines
+            ))
         } else {
-            // Return the whole file content
-            Ok(content.trim_end().to_string())
+            // Format the whole file with line numbers
+            let formatted_lines = format_with_line_numbers(&lines, 1);
+
+            Ok(format!(
+                "Here's the result of running `cat -n` on {}:\n{}\n",
+                path.display(),
+                formatted_lines
+            ))
         }
     }
+}
+
+// Helper function to format lines with line numbers
+fn format_with_line_numbers(lines: &[&str], init_line: usize) -> String {
+    lines
+        .iter()
+        .enumerate()
+        .map(|(i, line)| format!("{:6}\t{}", i + init_line, line))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn list_files_recursive(
